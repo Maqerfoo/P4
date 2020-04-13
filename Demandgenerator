@@ -1,0 +1,18 @@
+# -*- coding: utf-8 -*-
+"""
+Creating a weekly demand schedule from average demand(forecasts)
+"""
+from scipy.stats import norm
+
+avg_demand = {'Lakrids 1' : 680000, 'Lakrids 2' : 40000, 'Lakrids 3' : 40000,
+          'Lakrids 4' : 40000, 'Chocolate A' : 76800, 'Chocolate B' : 76800, 
+          'Chocolate C' : 76800, 'Chocolate D' : 76800, 'Chocolate E' : 76800,
+          'Crispy Caramel' : 64000, 'Blackberry & Dark' : 64000, 
+          'Twisted Banana' : 64000, 'Vanilla Mango' : 64000}
+
+#Week 1 demand
+demand_schedule = {}
+for k, v in avg_demand.items():
+    demand_schedule[k] = norm.rvs(loc = v, scale = 0.1*v)
+
+print(demand_schedule)
