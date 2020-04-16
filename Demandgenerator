@@ -2,17 +2,44 @@
 """
 Creating a weekly demand schedule from average demand(forecasts)
 """
+import numpy as np
+import pandas as pd
+import datetime
 from scipy.stats import norm
 
-avg_demand = {'Lakrids 1' : 680000, 'Lakrids 2' : 40000, 'Lakrids 3' : 40000,
-          'Lakrids 4' : 40000, 'Chocolate A' : 76800, 'Chocolate B' : 76800, 
-          'Chocolate C' : 76800, 'Chocolate D' : 76800, 'Chocolate E' : 76800,
-          'Crispy Caramel' : 64000, 'Blackberry & Dark' : 64000, 
-          'Twisted Banana' : 64000, 'Vanilla Mango' : 64000}
 
-#Week 1 demand
-demand_schedule = {}
-for k, v in avg_demand.items():
-    demand_schedule[k] = norm.rvs(loc = v, scale = 0.1*v)
+def create_demand_week(avg_demand):
+   ''' Create a weekly demand, normally distributed over an average, with sd = 1.10*mean'''
+   demand_schedule = {}
+   for k, v in avg_demand.items():
+        demand_schedule[k] = norm.rvs(loc = v, scale = 0.1*v)
+   return demand_schedule
 
-print(demand_schedule)
+def create_demand_year(year, avg_demand, mean, sd):
+   ''' Create weekly demand for a full year, where the demand increases by  every week, normally distributed with sd=0.0025'''
+    #finding weeks in a given year, and creating empty index-array
+   weeks_in_year = datetime.date(year, 12, 28).isocalendar()[1]
+   week_index = ["week0"]  
+   demand_year = pd.DataFrame(data = avg_demand, index=week_index)
+   for i in range(weeks_in_year):
+       week_index = ["week" + str(i+1)]
+       demand_schedule = create_demand_week(avg_demand)
+       demand_week = pd.DataFrame(data = demand_schedule, index = week_index)
+       
+       demand_year = demand_year.append(demand_week) 
+       #Incrementing the weekly demand, normally distributed with sd 
+       for k,v in avg_demand.items():
+           avg_demand[k] = v * norm.rvs(loc = mean, scale = sd)
+   return demand_year        
+
+
+avg_demand_week0 = {'Lakrids 1' : 68000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
+          'Lakrids 4' : 4000, 'Chocolate A' : 7680, 'Chocolate B' : 7680, 
+          'Chocolate C' : 7680, 'Chocolate D' : 7680, 'Chocolate E' : 7680,
+          'Crispy Caramel' : 6400, 'Blackberry & Dark' : 6400, 
+          'Twisted Banana' : 6400, 'Vanilla Mango' : 6400}   
+
+
+
+demand2020 = create_demand_year(2020, avg_demand_week0, mean=1.05, sd=0.0025)
+
