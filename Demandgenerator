@@ -34,7 +34,7 @@ def create_demand_year(year, avg_demand_base, mean, sd):
    return demand_year        
 
 
-avg_demand_week0 = {'Lakrids 1' : 68000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
+avg_demand_week0 = {'Lakrids 1' : 4000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
           'Lakrids 4' : 4000, 'Chocolate A' : 7680, 'Chocolate B' : 7680, 
           'Chocolate C' : 7680, 'Chocolate D' : 7680, 'Chocolate E' : 7680,
           'Crispy Caramel' : 6400, 'Blackberry & Dark' : 6400, 
@@ -42,5 +42,5 @@ avg_demand_week0 = {'Lakrids 1' : 68000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
 
 
 
-demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.01, sd=0.0025)
+demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.055, sd=0.0025)
 
