@@ -15,12 +15,13 @@ def create_demand_week(avg_demand):
         demand_schedule[k] = norm.rvs(loc = v, scale = 0.1*v)
    return demand_schedule
 
-def create_demand_year(year, avg_demand, mean, sd):
+def create_demand_year(year, avg_demand_base, mean, sd):
    ''' Create weekly demand for a full year, where the demand increases by  every week, normally distributed with sd=0.0025'''
     #finding weeks in a given year, and creating empty index-array
    weeks_in_year = datetime.date(year, 12, 28).isocalendar()[1]
    week_index = ["week0"]  
-   demand_year = pd.DataFrame(data = avg_demand, index=week_index)
+   demand_year = pd.DataFrame(data = avg_demand_base, index=week_index)
+   avg_demand = avg_demand_base
    for i in range(weeks_in_year):
        week_index = ["week" + str(i+1)]
        demand_schedule = create_demand_week(avg_demand)
@@ -29,7 +30,7 @@ def create_demand_year(year, avg_demand, mean, sd):
        demand_year = demand_year.append(demand_week) 
        #Incrementing the weekly demand, normally distributed with sd 
        for k,v in avg_demand.items():
-           avg_demand[k] = v * norm.rvs(loc = mean, scale = sd)
+           avg_demand[k] = v + (avg_demand_base[k] * norm.rvs(loc = mean, scale = sd))
    return demand_year        
 
 
@@ -41,5 +42,5 @@ avg_demand_week0 = {'Lakrids 1' : 68000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
 
 
 
-demand2020 = create_demand_year(2020, avg_demand_week0, mean=1.05, sd=0.0025)
+demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.01, sd=0.0025)
 
