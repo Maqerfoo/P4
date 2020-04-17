@@ -5,7 +5,6 @@ and outputs a stochastic yearly demand schedule. Every week is normally distribu
 over the mean values with sd of 10% of the mean. The demand increases stochastically
 every week, by input mean(in percentage) and sd
 """
-import numpy as np
 import pandas as pd
 import datetime
 from scipy.stats import norm
@@ -36,15 +35,3 @@ def create_demand_year(year, avg_demand_base, mean, sd):
        for k,v in avg_demand.items():
            avg_demand[k] = v + (avg_demand_base[k] * norm.rvs(loc = mean, scale = sd))
    return demand_year        
-
-
-avg_demand_week0 = {'Lakrids 1' : 4000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
-          'Lakrids 4' : 4000, 'Chocolate A' : 7680, 'Chocolate B' : 7680, 
-          'Chocolate C' : 7680, 'Chocolate D' : 7680, 'Chocolate E' : 7680,
-          'Crispy Caramel' : 6400, 'Blackberry & Dark' : 6400, 
-          'Twisted Banana' : 6400, 'Vanilla Mango' : 6400}   
-
-
-
-demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.15, sd=0.025)
-
