@@ -5,6 +5,7 @@ and outputs a stochastic yearly demand schedule. Every week is normally distribu
 over the mean values with sd of 10% of the mean. The demand increases stochastically
 every week, by input mean(in percentage) and sd
 """
+
 import pandas as pd
 import datetime
 from scipy.stats import norm
@@ -14,7 +15,7 @@ def create_demand_week(avg_demand):
    ''' Create a weekly demand, normally distributed over an average, with sd = 1.10*mean'''
    demand_schedule = {}
    for k, v in avg_demand.items():
-        demand_schedule[k] = norm.rvs(loc = v, scale = 0.1*v)
+        demand_schedule[k] = round(norm.rvs(loc = v, scale = 0.1*v))
    return demand_schedule
 
 def create_demand_year(year, avg_demand_base, mean, sd):
