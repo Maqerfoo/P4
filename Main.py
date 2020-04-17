@@ -5,7 +5,7 @@ Created on Fri Apr 17 10:21:10 2020
 @author: jakob
 """
 
-from Demandgenerator.py import create_demand_year
+from Demandgenerator import create_demand_year
 
 
 avg_demand_week0 = {'Lakrids 1' : 4000, 'Lakrids 2' : 4000, 'Lakrids 3' : 4000,
