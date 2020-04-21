@@ -6,6 +6,8 @@ Created on Fri Apr 17 10:21:10 2020
 
 from Demandgenerator import create_demand_year
 import math
+from scipy.stats import norm
+
 
 avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Lakrids 4' : 8000, 'Chocolate A' : 15360, 'Chocolate B' : 15360, 
@@ -14,7 +16,8 @@ avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Twisted Banana' : 12800, 'Vanilla Mango' : 12800}   
 
 
-demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.15, sd=0.025)
+
+demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.10, sd=0.025)
 
 
 #we can only produce integer number of batches of quantity 1875. So we produce
@@ -26,7 +29,8 @@ chocolate = demand2020.loc[ : , demand2020.columns.str.startswith("Lakrids") == 
 chocolate_rollover = chocolate.copy()
 for col in chocolate_rollover.columns:
     chocolate_rollover[col].values[:] = 0
-chocolate_batch = chocolate / 1875
+#the chocolate output from one individual batch is stochastic - the mean of all batches is 1875
+chocolate_batch = chocolate / (norm.rvs(loc = 1875, scale = 1875*0.05))
 chocolate_batch_produced = chocolate_batch.copy()
 
 for i in range(len(chocolate_batch)):
