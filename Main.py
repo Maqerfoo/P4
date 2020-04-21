@@ -31,4 +31,5 @@ BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star 
 
 demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.10, sd=0.025)
 
-batch_production = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
+
+chocolate_batch_production, liquorice_production = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
