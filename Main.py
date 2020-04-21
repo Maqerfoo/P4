@@ -5,8 +5,8 @@ Created on Fri Apr 17 10:21:10 2020
 """
 
 from Demandgenerator import create_demand_year
-import math
-from scipy.stats import norm
+from productionscheduler import batches_produced
+
 
 
 avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
@@ -15,30 +15,20 @@ avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Crispy Caramel' : 12800, 'Blackberry & Dark' : 12800, 
           'Twisted Banana' : 12800, 'Vanilla Mango' : 12800}   
 
-
+BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star anise' : 0.05}, 
+       'Lakrids 2' : {'Salt' : 0.17, 'Sugar' : 2, 'Raw liquorice' : 0.45}, 
+       'Lakrids 3' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Fruit juice' : 0.05},
+       'Lakrids 4' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Habanero' : 0.05},
+       'Chocolate A' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Liquorice coating' : 0.02},
+       'Chocolate B' : {'Sugar' : 4, 'Lakrids 1' : 1, 'White Chocolate' : 4, 'Passionfruit coating' : 0.02}, 
+       'Chocolate C' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Coffee coating' : 0.02}, 
+       'Chocolate D' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Salt and caramel essence' : 0.04, 'liquorice coating' : 0.02}, 
+       'Chocolate E' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Salmiak coating' : 0.02},
+       'Crispy Caramel' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Crisp' : 0.04, 'liquorice coating' : 0.02}, 
+       'Blackberry & Dark' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Blackberry essence' : 0.02, 'liquorice coating' : 0.02},
+       'Twisted Banana' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Banana coating' : 0.02},
+       'Vanilla Mango' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Vanilla essence' : 0.02, 'Mango coating' : 0.02}}
 
 demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.10, sd=0.025)
 
-
-#we can only produce integer number of batches of quantity 1875. So we produce
-#lowest integer, greater than batch quantity. Then we need to adjust for rollover
-#from previous weeks production
-
-lakrids = demand2020.loc[ : , demand2020.columns.str.startswith("Lakrids")]
-chocolate = demand2020.loc[ : , demand2020.columns.str.startswith("Lakrids") == False] 
-chocolate_rollover = chocolate.copy()
-for col in chocolate_rollover.columns:
-    chocolate_rollover[col].values[:] = 0
-#the chocolate output from one individual batch is stochastic - the mean of all batches is 1875
-chocolate_batch = chocolate / (norm.rvs(loc = 1875, scale = 1875*0.05))
-chocolate_batch_produced = chocolate_batch.copy()
-
-for i in range(len(chocolate_batch)):
-    #last week generates no rollover
-    if i == len(chocolate_batch):
-        for i in range(len(chocolate_batch_produced.columns)):
-            chocolate_batch_produced.iloc[-1, i] = math.ceil(chocolate_batch_produced.iloc[-1, i])
-            break
-    for x in range(len(chocolate_batch.columns)):
-        chocolate_batch_produced.iloc[i, x] = math.ceil(chocolate_batch.iloc[i, x] + (chocolate_rollover.iloc[i, x] / 1875))
-        chocolate_rollover.iloc[i, x] = (chocolate_batch_produced.iloc[i,x] * 1875 - chocolate.iloc[i,x])
+batch_production = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
