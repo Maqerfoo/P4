@@ -5,7 +5,9 @@ Created on Fri Apr 17 10:21:10 2020
 """
 
 from Demandgenerator import create_demand_year
+from Demandgenerator import create_forecast_year
 from productionscheduler import batches_produced
+
 
 
 
@@ -15,6 +17,7 @@ avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Crispy Caramel' : 12800, 'Blackberry & Dark' : 12800, 
           'Twisted Banana' : 12800, 'Vanilla Mango' : 12800}   
 
+#all ingredients are in g, except for 'Lakrids 1', which is one piece.
 BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star anise' : 0.05}, 
        'Lakrids 2' : {'Salt' : 0.17, 'Sugar' : 2, 'Raw liquorice' : 0.45}, 
        'Lakrids 3' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Fruit juice' : 0.05},
@@ -30,6 +33,18 @@ BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star 
        'Vanilla Mango' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Vanilla essence' : 0.02, 'Mango coating' : 0.02}}
 
 demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.10, sd=0.025)
+forecast2020 = create_forecast_year(2020, avg_demand_week0, mean=0.10)
+
+liquorice_production, chocolate_batch_production, batch_quantity = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
+production_schedule = chocolate_batch_production.multiply(batch_quantity).round().merge(liquorice_production, how='inner', left_index=True, right_index=True)
 
 
-chocolate_batch_production, liquorice_production = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
+#WIP
+#week1 = BOM.copy()
+#for k,v in BOM.items():
+ #     to_produce = production_schedule.iloc[0].loc[k]
+  #    product = k
+   #   weekly_materials = BOM[k].copy()
+    #  for t,c in BOM[k].items():
+     #    weekly_materials[t] = c * to_produce 
+      #week1[k] = weekly_materials[k]  

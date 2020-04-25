@@ -19,6 +19,7 @@ def batches_produced(demand, mean, sd):
         chocolate_rollover[col].values[:] = 0
     #the chocolate output from one individual batch is stochastic - the mean of all batches is 1875
     chocolate_batch_produced = chocolate_rollover.copy()
+    batch_quantity_save = chocolate_rollover.copy()
     for i in range(len(chocolate_batch_produced)):
         #last week generates no rollover
         if i == len(chocolate_batch_produced):
@@ -26,8 +27,9 @@ def batches_produced(demand, mean, sd):
                 chocolate_batch_produced.iloc[-1, i] = math.ceil(chocolate_batch_produced.iloc[-1, i])
                 break
         for x in range(len(chocolate_batch_produced.columns)):
-            batch_quantity = norm.rvs(loc = mean, scale = sd)
-            chocolate_batch_produced.iloc[i, x] = math.ceil((chocolate.iloc[i, x] + chocolate_rollover.iloc[i, x]) / batch_quantity)
-            chocolate_rollover.iloc[i, x] = (chocolate_batch_produced.iloc[i,x] * batch_quantity - chocolate.iloc[i,x])
-            liquorice_produced.iloc[i].loc['Lakrids 1'] = liquorice_produced.iloc[i].loc['Lakrids 1'] + (chocolate_batch_produced.iloc[i, x] * batch_quantity)
-    return chocolate_batch_produced, liquorice_produced
+            batch_quantity_temp = norm.rvs(loc = mean, scale = sd)
+            chocolate_batch_produced.iloc[i, x] = math.ceil((chocolate.iloc[i, x] + chocolate_rollover.iloc[i, x]) / batch_quantity_temp)
+            chocolate_rollover.iloc[i, x] = (chocolate_batch_produced.iloc[i,x] * batch_quantity_temp - chocolate.iloc[i,x])
+            liquorice_produced.iloc[i].loc['Lakrids 1'] = liquorice_produced.iloc[i].loc['Lakrids 1'] + (chocolate_batch_produced.iloc[i, x] * batch_quantity_temp)
+            batch_quantity_save.iloc[i,x] = batch_quantity_temp
+    return liquorice_produced, chocolate_batch_produced, batch_quantity_save
