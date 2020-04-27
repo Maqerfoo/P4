@@ -7,7 +7,8 @@ Created on Fri Apr 17 10:21:10 2020
 from Demandgenerator import create_demand_year
 from Demandgenerator import create_forecast_year
 from productionscheduler import batches_produced
-
+from productionscheduler import weekly_materials
+import simpy
 
 
 
@@ -36,15 +37,11 @@ demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.10, sd=0.025)
 forecast2020 = create_forecast_year(2020, avg_demand_week0, mean=0.10)
 
 liquorice_production, chocolate_batch_production, batch_quantity = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
-production_schedule = chocolate_batch_production.multiply(batch_quantity).round().merge(liquorice_production, how='inner', left_index=True, right_index=True)
+yearly_usage = liquorice_production.merge(chocolate_batch_production.multiply(batch_quantity).round(), how='inner', left_index=True, right_index=True)
 
 
-#WIP
-#week1 = BOM.copy()
-#for k,v in BOM.items():
- #     to_produce = production_schedule.iloc[0].loc[k]
-  #    product = k
-   #   weekly_materials = BOM[k].copy()
-    #  for t,c in BOM[k].items():
-     #    weekly_materials[t] = c * to_produce 
-      #week1[k] = weekly_materials[k]  
+week1_usage = weekly_materials(BOM, yearly_usage)
+
+class storage:
+    def __init__(self, env)
+

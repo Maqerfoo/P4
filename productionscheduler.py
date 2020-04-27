@@ -33,3 +33,13 @@ def batches_produced(demand, mean, sd):
             liquorice_produced.iloc[i].loc['Lakrids 1'] = liquorice_produced.iloc[i].loc['Lakrids 1'] + (chocolate_batch_produced.iloc[i, x] * batch_quantity_temp)
             batch_quantity_save.iloc[i,x] = batch_quantity_temp
     return liquorice_produced, chocolate_batch_produced, batch_quantity_save
+
+def weekly_materials(BOM, production_schedule):
+    week = BOM.copy()
+    for k,v in BOM.items():
+          to_produce = round(production_schedule.iloc[0].loc[k])
+          materials = BOM[k].copy()
+          for t,c in BOM[k].items():
+             materials[t] = c * to_produce
+          week[k] = materials 
+    return week
