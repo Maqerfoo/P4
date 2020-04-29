@@ -5,11 +5,8 @@ Created on Fri Apr 17 10:21:10 2020
 """
 
 from Demandgenerator import create_demand_year
-from Demandgenerator import create_forecast_year
-from productionscheduler import batches_produced
-from productionscheduler import batches_produced_no_variance
 from productionscheduler import weekly_materials
-from productionscheduler import liquorice_from_chocolate
+from productionscheduler import yearly_usage_function
 import simpy
 from scipy.stats import norm
 
@@ -42,24 +39,22 @@ BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star 
        'Twisted Banana' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Banana coating' : 0.02},
        'Vanilla Mango' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Vanilla essence' : 0.02, 'Mango coating' : 0.02}}
 
-demand2020 = create_demand_year(2020, avg_demand_week0, mean=0.10, sd=0.025)
-forecast2020 = create_forecast_year(2020, avg_demand_week0, mean=0.10)
 
-#adjusting for fixed batch quantity normally distributed over mean with sd
-#also adjusting for rollover-effects of over-production, due to only being able to produce full batches
-chocolate_batch_production_demand, batch_quantity_demand = batches_produced(demand2020, mean = 1875, sd = 1875*0.05)
-#adding the liquorices needed for the chocolates
-liquorice_demand = liquorice_from_chocolate(demand2020, chocolate_batch_production_demand, batch_quantity_demand)
-#merging everything in one dataframe
-yearly_usage = liquorice_demand.merge(chocolate_batch_production_demand.multiply(batch_quantity_demand).round(), how='inner', left_index=True, right_index=True)
+#the increase in demand, for every week is normally distributed over mean=mean_demand_increase with sd=mean_demand_increase_sd
+mean_demand_increase = 0.10
+mean_demand_increase_sd = 0.025
+#the demand of every product is stochastic. Normally distributed with sd=weekly_variation, over the increasing demand values
+weekly_variation = 0.10
 
 
-chocolate_batch_production_forecast, batch_quantity_forecast = batches_produced(forecast2020, mean = 1875, sd=0)
-liquorice_forecast = liquorice_from_chocolate(forecast2020, chocolate_batch_production_forecast, batch_quantity_forecast)
-yearly_forecast = liquorice_forecast.merge(chocolate_batch_production_forecast.multiply(1875.0), how='inner', left_index=True, right_index=True)
-for i in range(len(yearly_forecast)):
-    temp_sum = sum(chocolate_batch_production_forecast.iloc[i]) * 1875.0
-    yearly_forecast.iat[i,0] += temp_sum
+demand2020, forecast2020 = create_demand_year(2020, avg_demand_week0, mean_demand_increase, mean_demand_increase_sd, weekly_variation)
+
+#setting the mean chocolate batch size, normally distributed with sd = batch_size_variation
+batch_size = 1875
+batch_size_variation = 0.05*batch_size
+
+yearly_usage = yearly_usage_function(demand2020, mean = batch_size, sd = batch_size_variation)
+yearly_forecast = yearly_usage_function(forecast2020, mean = batch_size, sd=0)
     
 
 
@@ -68,10 +63,6 @@ week2_usage = weekly_materials(BOM, yearly_usage, 1)
 env = simpy.Environment()
 chocolate_machine = simpy.Resource(env, capacity=8)
 
-for i in range(len(chocolate_batch_production_demand)):
-    week_usage = weekly_materials(BOM, yearly_usage, i)
-    for x in range(len(chocolate_batch_production_demand.columns)):
-        env.process
 
 
 

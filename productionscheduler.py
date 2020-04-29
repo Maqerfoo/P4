@@ -28,26 +28,13 @@ def batches_produced(demand, mean, sd):
             #print(liquorice_produced)
     return chocolate_batch_produced, batch_quantity_save
 
-def batches_produced_no_variance(demand, mean):
-    chocolate = demand.loc[ : , demand.columns.str.startswith("Lakrids") == False]
-    chocolate_rollover = chocolate.copy()
-    for col in chocolate_rollover.columns:
-        chocolate_rollover[col].values[:] = 0
-    #the chocolate output from one individual batch is stochastic - the mean of all batches is 1875
-    chocolate_batch_produced = chocolate_rollover.copy()
-    for i in range(len(chocolate_batch_produced)):
-        for x in range(len(chocolate_batch_produced.columns)):
-            batch_quantity_temp = mean
-            chocolate_batch_produced.iat[i, x] = math.ceil((chocolate.iat[i, x] + chocolate_rollover.iat[i, x]) / batch_quantity_temp)
-            chocolate_rollover.iat[i, x] = (chocolate_batch_produced.iat[i,x] * batch_quantity_temp - chocolate.iat[i,x])
-            #print(liquorice_produced)
-    return chocolate_batch_produced
 
-def liquorice_from_chocolate(demand, chocolate_batch_production, chocolate_batch_quantity):
+def liquorice_from_chocolate(demand, chocolate_batch_production, chocolate_batch_size):
     liquorice_production = demand.loc[ : , demand.columns.str.startswith("Lakrids")]
     for i in range(len(demand)):
+        j = liquorice_production.iloc[i].index.get_loc('Lakrids 1')
         for x in range(len(chocolate_batch_production.columns)):
-            liquorice_production.iloc[i].at['Lakrids 1'] = liquorice_production.iloc[i].at['Lakrids 1'] + (chocolate_batch_production.iat[i, x] * chocolate_batch_quantity.iat[i,x])
+            liquorice_production.iloc[i , j] +=  (chocolate_batch_production.iat[i, x] * chocolate_batch_size.iat[i,x])
     return liquorice_production
 
 
@@ -60,3 +47,9 @@ def weekly_materials(BOM, production_schedule, week_index):
              materials[t] = c * to_produce
           week[k] = materials 
     return week
+
+def yearly_usage_function(demand, mean, sd):
+    chocolate, batch_size = batches_produced(demand, mean, sd)
+    liquorice = liquorice_from_chocolate(demand, chocolate, batch_size)
+    yearly_usage = liquorice.merge(chocolate.multiply(batch_size).round(), how='inner', left_index=True, right_index=True)
+    return yearly_usage
