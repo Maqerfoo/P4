@@ -38,18 +38,19 @@ def liquorice_from_chocolate(demand, chocolate_batch_production, chocolate_batch
     return liquorice_production
 
 
-def weekly_materials(BOM, production_schedule, week_index):
+def weekly_materials_usage(BOM, yearly_usage, week_index):
     week = BOM.copy()
     for k,v in BOM.items():
-          to_produce = round(production_schedule.iloc[week_index].loc[k])
-          materials = BOM[k].copy()
-          for t,c in BOM[k].items():
-             materials[t] = c * to_produce
-          week[k] = materials 
+        j = yearly_usage.iloc[week_index].index.get_loc(k)
+        to_produce = round(yearly_usage.iat[week_index, j])
+        materials = BOM[k].copy()
+        for t,c in BOM[k].items():
+            materials[t] = c * to_produce
+        week[k] = materials 
     return week
 
 def yearly_usage_function(demand, mean, sd):
     chocolate, batch_size = batches_produced(demand, mean, sd)
     liquorice = liquorice_from_chocolate(demand, chocolate, batch_size)
     yearly_usage = liquorice.merge(chocolate.multiply(batch_size).round(), how='inner', left_index=True, right_index=True)
-    return yearly_usage
+    return yearly_usage, batch_size, chocolate
