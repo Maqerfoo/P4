@@ -12,6 +12,10 @@ from scipy.stats import norm
 import math
 
 
+def distribute_batches(batches, days):
+    base, extra = divmod(batches, days)
+    return [base + (i < extra) for i in range(days)]
+
 def weeks_in_year_func(year):
     weeks = datetime.date(year, 12, 28).isocalendar()[1]
     return weeks

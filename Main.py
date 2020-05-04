@@ -5,7 +5,7 @@ Created on Fri Apr 17 10:21:10 2020
 """
 
 from Demandgenerator import create_forecast_year
-from Demandgenerator import distribute
+from Demandgenerator import distribute_batches
 from scipy.stats import norm
 import simpy
        
@@ -22,25 +22,19 @@ def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd
 def start_week(env, week, forecast):
     batches_to_produce = forecast.loc[ : , forecast.columns.str.startswith("Lakrids") == False]
     batches_to_produce = batches_to_produce.iloc[week] / batch_size
-    batches_not_evenly_distributed = batches_to_produce.copy()
     minutes_in_week_1shift = 5*8*60
     #if all batch times are 3 standard deviations above the mean we will use two shifts this week
     if batches_to_produce.sum() * (batch_time + 3*batch_time_sd) > minutes_in_week_1shift:
         shifts = 1
     else:
         shifts = 2
+    days = 5
     for x in range(len(batches_to_produce)):
-        batches_schedule[x] = batches_to_produce[x] // 5 #5 days in every week
-        batches_not_evenly_distributed[x] = batches_to_produce[x] %  #remainder
-    for j in range(len(batches_to_produce)):
-        batches_to_produce[j] =    
+        day1_to_5 = distribute_batches(batches_to_produce[x], days)
+        
+        
 
-def start_day(env, week, schedule):
-    
 
-def distribute(batches, days):
-    base, extra = divmod(batches, days)
-    return [base + (i < extra) for i in range(days)]
 
 avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Lakrids 4' : 8000, 'Chocolate A' : 15360, 'Chocolate B' : 15360, 
@@ -85,4 +79,5 @@ finished_product_container = BOM.fromkeys(BOM.keys())
 for k in finished_product_container:
      finished_product_container[k] = simpy.Container(env)
 
+day1_to_5 = start_week(env, 1, forecast2020)
 env.process(start_week(env, 1, forecast2020))
