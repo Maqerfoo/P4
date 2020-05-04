@@ -4,21 +4,43 @@ Created on Fri Apr 17 10:21:10 2020
 @author: jakob
 """
 
-from Demandgenerator import create_demand_year
-from productionscheduler import weekly_materials_usage
-from productionscheduler import yearly_usage_function
-import simpy
+from Demandgenerator import create_forecast_year
+from Demandgenerator import distribute
 from scipy.stats import norm
-
-
-
-def chocolate_batch_production(env, batch_time, chocolate_machine, product_index):
+import simpy
+       
+    
+    
+def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, batch_size, product_index, BOM):
     with chocolate_machine.request() as req:
         yield req
-        batch_time = norm.rvs(loc = batch_time, scale = 0.1*batch_time)
-        yield env.timeout(batch_time)
-        print("batch of " + product_index + " finished at %d" % env.now )
+        batch_time = norm.rvs(loc = batch_time, scale = batch_time_sd)
+    yield env.timeout(batch_time)   
+    #print("batch of " + product_index + " finished at %d" % env.now )
+    finished_product_container[product_index].put(norm.rvs(loc = batch_size, scale=batch_size_sd))
 
+def start_week(env, week, forecast):
+    batches_to_produce = forecast.loc[ : , forecast.columns.str.startswith("Lakrids") == False]
+    batches_to_produce = batches_to_produce.iloc[week] / batch_size
+    batches_not_evenly_distributed = batches_to_produce.copy()
+    minutes_in_week_1shift = 5*8*60
+    #if all batch times are 3 standard deviations above the mean we will use two shifts this week
+    if batches_to_produce.sum() * (batch_time + 3*batch_time_sd) > minutes_in_week_1shift:
+        shifts = 1
+    else:
+        shifts = 2
+    for x in range(len(batches_to_produce)):
+        batches_schedule[x] = batches_to_produce[x] // 5 #5 days in every week
+        batches_not_evenly_distributed[x] = batches_to_produce[x] %  #remainder
+    for j in range(len(batches_to_produce)):
+        batches_to_produce[j] =    
+
+def start_day(env, week, schedule):
+    
+
+def distribute(batches, days):
+    base, extra = divmod(batches, days)
+    return [base + (i < extra) for i in range(days)]
 
 avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Lakrids 4' : 8000, 'Chocolate A' : 15360, 'Chocolate B' : 15360, 
@@ -42,43 +64,25 @@ BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star 
        'Vanilla Mango' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Vanilla essence' : 0.02, 'Mango coating' : 0.02}}
 
 
-#the increase in demand, for every week is normally distributed over mean=mean_demand_increase with sd=mean_demand_increase_sd
 mean_demand_increase = 0.10
-mean_demand_increase_sd = 0.025
-#the demand of every product is stochastic. Normally distributed with sd=weekly_variation, over the increasing demand values
-product_variation = 0.10
-
-
-demand2020, forecast2020 = create_demand_year(2020, avg_demand_week0, mean_demand_increase, mean_demand_increase_sd, product_variation)
-
-#setting the mean chocolate batch size, normally distributed with sd = batch_size_variation
 batch_size = 1875
-batch_size_variation = 0.05*batch_size
+batch_size_sd = batch_size*0.075
 
-yearly_usage, batch_size_actual, batches_demand = yearly_usage_function(demand2020, mean = batch_size, sd = batch_size_variation)
-yearly_forecast, batch_size_forecast, batches_forecast = yearly_usage_function(forecast2020, mean = batch_size, sd=0)
-    
-week1_usage = weekly_materials_usage(BOM, yearly_usage, 0)
-week1_forecast = weekly_materials_usage(BOM, yearly_forecast, 0)
+forecast2020 = create_forecast_year(2020, avg_demand_week0, mean_demand_increase, batch_size)
+
 
 #in minutes
 batch_time = 80
+batch_time_sd = 0.1*80
+
+number_of_machines = 8
+
 
 env = simpy.Environment()
-chocolate_machine = simpy.Resource(env, capacity=8)
+chocolate_machine = simpy.Resource(env, capacity=number_of_machines)
 
-for i in range(len(batches_demand)):
-    print("week" + str(i))
-    for x in range(len(batches_demand.iloc[i])):
-        for j in range(int(batches_demand.iat[i,x])):
-            env.process(chocolate_batch_production(env, batch_time, chocolate_machine, batches_demand.columns[x]))
+finished_product_container = BOM.fromkeys(BOM.keys())
+for k in finished_product_container:
+     finished_product_container[k] = simpy.Container(env)
 
-env.run()   
-
-
-
-
-
-
-
-
+env.process(start_week(env, 1, forecast2020))
