@@ -6,6 +6,7 @@ Created on Fri Apr 17 10:21:10 2020
 
 from Demandgenerator import create_forecast_year
 from Demandgenerator import distribute_batches
+from simulations import unique_ingredients
 from scipy.stats import norm
 import simpy
 import numpy as np
@@ -15,20 +16,43 @@ env = simpy.Environment()
 def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, product_index, BOM):
     with chocolate_machine.request() as req:
         yield req
-        batch_time = norm.rvs(loc = batch_time, scale = batch_time_sd)
+        batch_time = norm.rvs(loc = batch_time, scale = abs(batch_time_sd))
         yield env.timeout(batch_time)   
         print("batch of " + product_index + " finished at %d" % env.now )
-        finished_product_container[product_index].put(norm.rvs(loc = batch_size, scale=batch_size_sd))
+        finished_product_container[product_index].put(round(norm.rvs(loc = batch_size, scale=abs(batch_size_sd))))
 
 def start_day(env, day, schedule, shifts):
-    print("day" + str(day) + " started at:" + str(env.now))
+    print("day " + str(day) + " started at:" + str(env.now))
     for k,v in schedule[day].items():
-        for i in range(schedule[day][k]):
+        for i in range(int(schedule[day][k])):
             day_batches = [env.process(chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, k, BOM))]
     yield env.all_of(day_batches)
-    print("day" + str(day) + " ended at:" + str(env.now))
-    #reorder here
+    yield env.timeout(20)
+    print("day " + str(day) + " ended at:" + str(env.now))
     #change next days schedule here
+    #reorder here
+
+
+def demand_day(env, day, schedule):
+    for k,v in schedule[day].items():
+        if day == 0:
+            v = v + weekly_rollover[k]
+            print(str(weekly_rollover[k]) + "weekly rollover added of:" + str(k))
+        #we forecast 3 standard deviations over the mean demand
+        v = v*batch_size
+        #safety-stock is being accounted for here. Essentially the scheduled production is set to be 3
+        #standard deviations above the mean of the demand
+        safety_stock_in_sd = 3
+        #possibility here for dynamic safety-stock!!!
+        demand = max(0, norm.rvs(loc = (v - safety_stock_in_sd*demand_sd*v) , scale = abs(demand_sd*v)))
+        print("demand is: " + str(demand))
+        if demand > 0:
+            print("demand taken: %d of " %demand + str(k))
+            yield finished_product_container[k].get(round(demand))
+        else:
+            yield env.timeout(0)
+
+
     
 def start_week(env, week, forecast):
     print("week started at:" + str(env.now))
@@ -55,13 +79,21 @@ def start_week(env, week, forecast):
          for j in range(days):
              day1_to_5_batches[j][idx] = day1_to_5_batches_temp[j]
     for k in range(days):
-        day = env.process(start_day(env, k, day1_to_5_batches, shifts))
-        yield day
-        #Take demand here
+        day_process = env.process(start_day(env, k, day1_to_5_batches, shifts))
+        yield day_process
+        demand_proc = env.process(demand_day(env, k , day1_to_5_batches))
+        yield demand_proc
+        #here we update the schedule continously, accounting for the chocolates already in storage!!
+        for t,c in day1_to_5_batches[k].items():
+            excess_batches = max(0,int(finished_product_container[t].level // batch_size))
+            print("excess batches in storage: " + str(excess_batches) + "of " + str(t))
+            if k != 4:       
+                day1_to_5_batches[k+1][t] = day1_to_5_batches[k+1][t] - excess_batches
+            else:
+                weekly_rollover[t] = excess_batches
+                print(str(weekly_rollover[t]) + "weekly rollover left behind of:" + str(t))
     print("week ended at:" + str(env.now))
         
-#def start_day(env, )
-
 
 avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
           'Lakrids 4' : 8000, 'Chocolate A' : 15360, 'Chocolate B' : 15360, 
@@ -86,6 +118,7 @@ BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star 
 
 
 mean_demand_increase = 0.10
+demand_sd = 0.05
 batch_size = 1875
 batch_size_sd = batch_size*0.075
 
@@ -100,10 +133,13 @@ number_of_machines = 8
 
 chocolate_machine = simpy.Resource(env, capacity=number_of_machines)
 
-finished_product_container = BOM.fromkeys(BOM.keys())
+finished_product_container = dict.fromkeys(BOM.keys())
 for k in finished_product_container:
-     finished_product_container[k] = simpy.Container(env)
+     finished_product_container[k] = simpy.Container(env, init=1000)
 
+list_of_ingredients = unique_ingredients(BOM)
 
-env.process(start_week(env, 1, forecast2020))
+weekly_rollover = dict.fromkeys(BOM.keys(), 0)
+
+env.process(start_week(env, 52, forecast2020))
 env.run()

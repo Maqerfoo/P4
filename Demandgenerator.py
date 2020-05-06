@@ -32,7 +32,7 @@ def create_demand_week(forecast_week, variation):
    ''' Create a weekly demand, normally distributed over an average, with sd = variation*mean'''
    demand_schedule = {}
    for k, v in forecast_week.items():
-        demand_schedule[k] = round(norm.rvs(loc = v, scale = variation*v))
+        demand_schedule[k] = round(norm.rvs(loc = v, scale = abs(variation*v)))
    return demand_schedule
 
 def create_forecast_week(avg_demand):
