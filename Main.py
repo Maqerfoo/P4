@@ -8,20 +8,33 @@ from Demandgenerator import create_forecast_year
 from Demandgenerator import distribute_batches
 from scipy.stats import norm
 import simpy
-       
+import numpy as np
+env = simpy.Environment()       
     
     
-def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, batch_size, product_index, BOM):
+def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, product_index, BOM):
     with chocolate_machine.request() as req:
         yield req
         batch_time = norm.rvs(loc = batch_time, scale = batch_time_sd)
-    yield env.timeout(batch_time)   
-    #print("batch of " + product_index + " finished at %d" % env.now )
-    finished_product_container[product_index].put(norm.rvs(loc = batch_size, scale=batch_size_sd))
+        yield env.timeout(batch_time)   
+        print("batch of " + product_index + " finished at %d" % env.now )
+        finished_product_container[product_index].put(norm.rvs(loc = batch_size, scale=batch_size_sd))
 
+def start_day(env, day, schedule, shifts):
+    print("day" + str(day) + " started at:" + str(env.now))
+    for k,v in schedule[day].items():
+        for i in range(schedule[day][k]):
+            day_batches = [env.process(chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, k, BOM))]
+    yield env.all_of(day_batches)
+    print("day" + str(day) + " ended at:" + str(env.now))
+    #reorder here
+    #change next days schedule here
+    
 def start_week(env, week, forecast):
+    print("week started at:" + str(env.now))
     batches_to_produce = forecast.loc[ : , forecast.columns.str.startswith("Lakrids") == False]
     batches_to_produce = batches_to_produce.iloc[week] / batch_size
+    batches_to_produce = batches_to_produce.astype('int32')
     minutes_in_week_1shift = 5*8*60
     #if all batch times are 3 standard deviations above the mean we will use two shifts this week
     if batches_to_produce.sum() * (batch_time + 3*batch_time_sd) > minutes_in_week_1shift:
@@ -29,11 +42,25 @@ def start_week(env, week, forecast):
     else:
         shifts = 2
     days = 5
+    day1_to_5_batches = [0] * days
+    batches_temp = batches_to_produce.copy()
+    batches_temp.values[:] = 0
+    for i in range(days):
+        day1_to_5_batches[i] = batches_temp.to_dict()
+    day1_to_5_batches_total = np.zeros(days, dtype=int)
     for x in range(len(batches_to_produce)):
-        day1_to_5 = distribute_batches(batches_to_produce[x], days)
+         day1_to_5_batches_temp = np.zeros(days, dtype=int)
+         idx = batches_to_produce.index[x]
+         day1_to_5_batches_temp = distribute_batches(int(batches_to_produce[x]), days, day1_to_5_batches_total)
+         for j in range(days):
+             day1_to_5_batches[j][idx] = day1_to_5_batches_temp[j]
+    for k in range(days):
+        day = env.process(start_day(env, k, day1_to_5_batches, shifts))
+        yield day
+        #Take demand here
+    print("week ended at:" + str(env.now))
         
-        
-
+#def start_day(env, )
 
 
 avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
@@ -71,13 +98,12 @@ batch_time_sd = 0.1*80
 
 number_of_machines = 8
 
-
-env = simpy.Environment()
 chocolate_machine = simpy.Resource(env, capacity=number_of_machines)
 
 finished_product_container = BOM.fromkeys(BOM.keys())
 for k in finished_product_container:
      finished_product_container[k] = simpy.Container(env)
 
-day1_to_5 = start_week(env, 1, forecast2020)
+
 env.process(start_week(env, 1, forecast2020))
+env.run()

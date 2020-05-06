@@ -7,14 +7,22 @@ every week, by input mean(in percentage) and sd
 """
 
 import pandas as pd
+import numpy as np
 import datetime
 from scipy.stats import norm
 import math
 
 
-def distribute_batches(batches, days):
-    base, extra = divmod(batches, days)
-    return [base + (i < extra) for i in range(days)]
+def distribute_batches(batches, days, day_total):
+    base = batches // days
+    extra = batches % days
+    day1_to_5 = np.zeros(days, dtype=int)
+    day1_to_5.fill(base)
+    for i in range(int(extra)):
+        idx = np.argmin(day_total)
+        day1_to_5[idx] = day1_to_5[idx] + 1
+        day_total[idx] = day_total[idx] + 1
+    return day1_to_5
 
 def weeks_in_year_func(year):
     weeks = datetime.date(year, 12, 28).isocalendar()[1]
