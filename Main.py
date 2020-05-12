@@ -35,6 +35,9 @@ def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd
             print("batch of " + str(product_index) + " failed")
             yield env.timeout(0)
 
+#def reorder():
+    
+
 def start_day(env, day, schedule, shifts):
     print("day " + str(day) + " started at:" + str(env.now))
     for k,v in schedule[day].items():
@@ -123,18 +126,13 @@ def start_year(env, forecast):
         week = env.process(start_week(env, i, forecast))
         yield week       
 
-avg_demand_week0 = {'Lakrids 1' : 8000, 'Lakrids 2' : 8000, 'Lakrids 3' : 8000,
-          'Lakrids 4' : 8000, 'Chocolate A' : 15360, 'Chocolate B' : 15360, 
+avg_demand_week0 = {'Chocolate A' : 15360, 'Chocolate B' : 15360, 
           'Chocolate C' : 15360, 'Chocolate D' : 15360, 'Chocolate E' : 15360,
           'Crispy Caramel' : 12800, 'Blackberry & Dark' : 12800, 
           'Twisted Banana' : 12800, 'Vanilla Mango' : 12800}   
 
 #all ingredients are in g, except for 'Lakrids 1', which is one piece.
-BOM = {'Lakrids 1' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Star anise' : 0.05}, 
-       'Lakrids 2' : {'Salt' : 0.17, 'Sugar' : 2, 'Raw liquorice' : 0.45}, 
-       'Lakrids 3' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Fruit juice' : 0.05},
-       'Lakrids 4' : {'Salt' : 0.12, 'Sugar' : 2, 'Raw liquorice' : 0.45, 'Habanero' : 0.05},
-       'Chocolate A' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Liquorice coating' : 0.02},
+BOM = {'Chocolate A' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Liquorice coating' : 0.02},
        'Chocolate B' : {'Sugar' : 4, 'Lakrids 1' : 1, 'White Chocolate' : 4, 'Passionfruit coating' : 0.02}, 
        'Chocolate C' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Coffee coating' : 0.02}, 
        'Chocolate D' : {'Sugar' : 4, 'Lakrids 1' : 1, 'Chocolate' : 4, 'Salt and caramel essence' : 0.04, 'liquorice coating' : 0.02}, 

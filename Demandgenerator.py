@@ -58,19 +58,7 @@ def batches_produced(forecast_year, batch_size):
         for x in range(len(chocolate_batch_produced.columns)):
             chocolate_batch_produced.iat[i, x] = math.ceil((chocolate.iat[i, x] + chocolate_rollover.iat[i, x]) / batch_size)
             chocolate_rollover.iat[i, x] = (chocolate_batch_produced.iat[i,x] * batch_size - chocolate.iat[i,x])
-            #print(liquorice_produced)
-    liquorice = liquorice_from_chocolate(forecast_year, chocolate_batch_produced, batch_size)
-    forecast_year_adjusted = liquorice.merge(chocolate_batch_produced.multiply(batch_size), how='inner', left_index=True, right_index=True)
-    return forecast_year_adjusted
-
-
-def liquorice_from_chocolate(demand, chocolate_batch_production, chocolate_batch_size):
-    liquorice_production = demand.loc[ : , demand.columns.str.startswith("Lakrids")]
-    for i in range(len(demand)):
-        j = liquorice_production.iloc[i].index.get_loc('Lakrids 1')
-        for x in range(len(chocolate_batch_production.columns)):
-            liquorice_production.iat[i , j] +=  (chocolate_batch_production.iat[i, x] * chocolate_batch_size)
-    return liquorice_production
+    return chocolate_batch_produced.multiply(batch_size)
 
 def create_forecast_year(year, avg_demand_base, mean, batch_size):
     ''' Create weekly demand for a full year, where the demand increases by  every week, normally distributed with sd=0.0025'''
