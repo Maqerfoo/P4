@@ -10,6 +10,7 @@ from simulations import unique_ingredients
 from simulations import containers_full_levels
 from scipy.stats import norm
 import simpy
+import math
 import numpy as np
 env = simpy.Environment()       
     
@@ -40,8 +41,8 @@ def reorder():
     for k,v in ingredients_container.items():
         if ingredients_container[k].level < ingredients_container_full[k] * reorder_threshold:
             for k,v in ingredients_container.items():
-                print("level of %s is:" %k + str(ingredients_container[k].level))
-                print("reordered :" + str(ingredients_container_full[k] - ingredients_container[k].level))
+                #print("level of %s is:" %k + str(ingredients_container[k].level))
+                #print("reordered :" + str(ingredients_container_full[k] - ingredients_container[k].level))
                 reorder_amount = ingredients_container_full[k] - ingredients_container[k].level
                 if max(0,reorder_amount) != 0:
                     ingredients_container[k].put(ingredients_container_full[k] - ingredients_container[k].level)
@@ -74,12 +75,12 @@ def demand_day(env, week, batches):
         demand = norm.rvs(loc = (forecast_val - safety_stock_in_sd*demand_sd*forecast_val) , scale = abs(demand_sd*forecast_val))
         if max(0,demand) > 0:
             if demand < finished_product_container[k].level:
-                #print("demand taken: %d of " %demand + str(k))
+                print("demand taken: %d of " %demand + str(k))
                 yield finished_product_container[k].get(round(demand))
             else: 
                 #report missed demand?
                 demand = finished_product_container[k].level
-                #print("demand is: " + str(demand))
+                print("demand is: " + str(demand))
                 if demand != 0:
                     yield finished_product_container[k].get(round(demand))
                 else: 
@@ -96,9 +97,11 @@ def start_week(env, week, forecast):
     batches_to_produce = batches_to_produce.iloc[week] / batch_size
     batches_to_produce = batches_to_produce.astype('int32')
     minutes_in_week_1shift = 5*8*60
-    a, b, c = kanban_cycle(EOQ(forecast, week))
-    leadtime_safety_stock_replenishment = ((a / b) * c) * 24
-    print(leadtime_safety_stock_replenishment)
+    orders_pr_week_full_int = EOQ(forecast, week)
+    a, b, c = kanban_cycle(orders_pr_week_full_int)
+    safety_stock_levels, demand_averages = safety_stock_func(orders_pr_week_full_int, week, forecast)
+    kanban_number = kanban_number_func(orders_pr_week_full_int, demand_averages, safety_stock_levels, forecast, week)
+    print("kanban number: " + str(kanban_number))
     #if all batch times are 3 standard deviations above the mean we will use two shifts this week
     if batches_to_produce.sum() * (batch_time + 3*batch_time_sd) > minutes_in_week_1shift:
         shifts = 1
@@ -176,17 +179,17 @@ forecast2020 = create_forecast_year(2020, avg_demand_week0, mean_demand_increase
 chocolate_machine = simpy.Resource(env, capacity=number_of_machines)
 
 #E-Kanban system code
-def kanban_cycle(EOQ):
+def kanban_cycle(orders_pr_week_full_int):
     # To get the order_cycle we devide 5 (numbers of working days) with the EOQ (number of orders pr. week)
     lead_time_in_hours = 14
     lead_time_from_supplier = lead_time_in_hours/24
-    b = math.ceil(EOQ / 5)
+    b = math.ceil(orders_pr_week_full_int / 5)
     a = 1
     order_cycle = a / b
     c = lead_time_from_supplier/order_cycle
     return a, b, c
 
-a, b, c = kanban_cycle(EOQ(forecast2020, 2))
+
    
  # This is the modified EOQ formula that determines how much of a product to buy for each order while considering 
  # variables like: holding costs, order cost and the yearly/weekly demand
@@ -209,25 +212,34 @@ def EOQ(forecast, week):
     print(orders_pr_week_full_int)
     return orders_pr_week_full_int
 
-def kanban_number(forecast, week, safety_stock):
-    total_demand = 0 
+def kanban_number_func(orders_pr_week_full_int, demand_averages, safety_stock_levels, forecast, week):
     bin_size = 5
-    safety_kanban_number = safety_stock
-    weekly_forecast = forecast.iloc[week]
-    for k,v in BOM.items():
-        for t,c in BOM[k].items():
-            total_demand = total_demand + ( (c * weekly_forecast.at[k]) /1000)
-            kanban_number = (((total_demand * a (c + 1)/b + safety_kanban_number) / bin_size)
+    a, b, c = kanban_cycle(orders_pr_week_full_int)
+    #weekly_forecast = forecast.iloc[week]
+    kanban_number = dict.copy(demand_averages)
+    for k,v in demand_averages.items():
+        kanban_number[k] = ((demand_averages[k] * a * (c + 1)/b + safety_stock_levels[k]) / bin_size)
+    print(kanban_number)
     return kanban_number
 
 
-def safety_stock(EOQ, week, forecast):
+def safety_stock_func(orders_pr_week_full_int, week, forecast):
     service_level = 1.28
-    a, b, c = kanban_cycle(EOQ(forecast, week))
+    a, b, c = kanban_cycle(orders_pr_week_full_int)
+    print(str(a) + " " + str(b)+ " " + str(c))
     leadtime_safety_stock_replenishment = ((a / b) * c) * 24
     print(leadtime_safety_stock_replenishment)
-    demand = sum(forecast.iloc[week]) - 3*demand_sd*
-    return 
+    weekly_forecast = forecast.iloc[week]
+    demand_averages = unique_ingredients(BOM)
+    safety_stock_levels = dict.copy(demand_averages)
+    for k,v in BOM.items():
+        for t,c in BOM[k].items():
+            demand_averages[t] = demand_averages[t] + ((( (c * weekly_forecast.at[k]) /1000) / 5) / 24 )
+    #print(demand_averages)
+    for k, v in demand_averages.items():
+        safety_stock_levels[k] = service_level * leadtime_safety_stock_replenishment * demand_averages[k]
+    #print(safety_stock_levels)
+    return safety_stock_levels, demand_averages
 
 
 
@@ -252,7 +264,6 @@ weekly_rollover = dict.fromkeys(BOM.keys(),0)
 env.process(start_year(env, forecast2020))
 
 ###//// Visualization variables \\\\###
-for k in ingredients_container.keys():
-    ingredients_levels
+
     
 env.run()
