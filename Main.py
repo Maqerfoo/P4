@@ -11,6 +11,8 @@ from simulations import containers_full_levels
 from scipy.stats import norm
 import simpy
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 env = simpy.Environment()       
     
     
@@ -18,16 +20,27 @@ def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd
     with chocolate_machine.request() as req:
         yield req
         req2 = []
+        temp_levels = dict.copy(dict.fromkeys(ingredients_levels.keys()))
+        for k,v in temp_levels.items():
+            temp_levels[k] = {"level" : None, "time" : None}
         req_trig = True
         for k,v in BOM[product_index].items():
             if ingredients_container[k].level > (v * batch_size):
                 req2.append(ingredients_container[k].get(v * batch_size))
+                temp_levels[k]["level"] = ingredients_container[k].level
+                temp_levels[k]["time"] = env.now
             else: 
                 print("experienced stock-out at " + str(env.now) + "of product: " + str(k) )
                 print("inventory is at: " + str(ingredients_container[k].level) )
+                global stock_outs
+                stock_outs = stock_outs + 1
                 req_trig = False
         if req_trig == True: 
             yield env.all_of(req2)
+            for k,v in temp_levels.items():
+                if temp_levels[k]["level"] is not None:
+                    ingredients_levels[k]["level"].append(temp_levels[k]["level"])
+                    ingredients_levels[k]["time"].append(temp_levels[k]["time"])
             batch_time = norm.rvs(loc = batch_time, scale = abs(batch_time_sd))
             yield env.timeout(batch_time)   
             #print("batch of " + product_index + " finished at %d" % env.now )
@@ -39,12 +52,16 @@ def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd
 def reorder():
     for k,v in ingredients_container.items():
         if ingredients_container[k].level < ingredients_container_full[k] * reorder_threshold:
+            global deliveries
+            deliveries = deliveries + 1
             for k,v in ingredients_container.items():
                 print("level of %s is:" %k + str(ingredients_container[k].level))
                 print("reordered :" + str(ingredients_container_full[k] - ingredients_container[k].level))
                 reorder_amount = ingredients_container_full[k] - ingredients_container[k].level
                 if max(0,reorder_amount) != 0:
                     ingredients_container[k].put(ingredients_container_full[k] - ingredients_container[k].level)
+                    ingredients_levels[k]["level"].append(ingredients_container[k].level)
+                    ingredients_levels[k]["time"].append(env.now)
                 
             
     
@@ -55,7 +72,17 @@ def start_day(env, day, schedule, shifts):
         for i in range(int(schedule[day][k])):
             day_batches = [env.process(chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, k, BOM))]
     yield env.all_of(day_batches)
+    temp_level = 0
+    for k,v in ingredients_levels.items():
+        temp_level = temp_level + ingredients_container[k].level
+    ingredients_level_total["level"].append(temp_level)
+    ingredients_level_total["time"].append(env.now)
     reorder()
+    temp_level = 0
+    for k,v in ingredients_levels.items():
+        temp_level = temp_level + ingredients_container[k].level
+    ingredients_level_total["level"].append(temp_level)
+    ingredients_level_total["time"].append(env.now)
     yield env.timeout(20)
     print("day " + str(day) + " ended at:" + str(env.now))
     #reorder here
@@ -84,7 +111,6 @@ def demand_day(env, week, batches):
                     yield finished_product_container[k].get(round(demand))
                 else: 
                     yield env.timeout(0)
-
         else:
             yield env.timeout(0)
 
@@ -164,7 +190,7 @@ batch_time = 80
 batch_time_sd = 0.1*80
 number_of_machines = 8
 reorder_threshold = 0.4
-full_percentage = 1/5
+full_percentage = 2/5
 
 
 forecast2020 = create_forecast_year(2020, avg_demand_week0, mean_demand_increase, batch_size)
@@ -192,7 +218,21 @@ weekly_rollover = dict.fromkeys(BOM.keys(),0)
 env.process(start_year(env, forecast2020))
 
 ###//// Visualization variables \\\\###
-for k in ingredients_container.keys():
-    ingredients_levels
-    
+ingredients_levels = dict.fromkeys(ingredients_container_full)
+for k,v in ingredients_levels.items():
+    ingredients_levels[k] = {"level" : [ingredients_container_full[k]], "time" : [0]}
+
+ingredients_level_total = {"level" : [0], "time" : [0]}
+
+stock_outs = 0
+deliveries = 0  
+  
 env.run()
+
+inventory_levels_dataframes = dict.copy(dict.fromkeys(ingredients_levels.keys() ))
+inventory_level_total_df = pd.DataFrame(ingredients_level_total, columns = dict.fromkeys(ingredients_level_total.keys() ))
+for k,v in ingredients_levels.items():
+    inventory_levels_dataframes[k] = pd.DataFrame(ingredients_levels[k], columns = dict.fromkeys(ingredients_levels[k].keys() ))
+
+inventory_level_df_short = inventory_level_total_df[0:100]
+inventory_level_df_short.plot(kind = "line", x = "time", y = "level")
