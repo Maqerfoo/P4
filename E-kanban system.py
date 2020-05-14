@@ -71,3 +71,6 @@ def EOQ(holding_cost_pr_product, order_cost, weekly_usage_in_rawmaterials):
     
 #((ingredienser_af_lakrids1 * amount_of_lakrids1) * order_cost_lakrids1) / holding_cost_lakrids1
 
+
+
+       
