@@ -9,6 +9,7 @@ from Demandgenerator import distribute_batches
 from simulations import unique_ingredients
 from simulations import containers_full_levels
 from scipy.stats import norm
+from sklearn.metrics import auc
 import simpy
 import numpy as np
 import pandas as pd
@@ -77,13 +78,18 @@ def start_day(env, day, schedule, shifts):
         temp_level = temp_level + ingredients_container[k].level
     ingredients_level_total["level"].append(temp_level)
     ingredients_level_total["time"].append(env.now)
+    week = env.now // (168*60)
+    rest_of_day = 24 * 60 - (env.now - week * 168*60 - day * 24*60)
+    if day == 4:
+        yield env.timeout(rest_of_day + 2*24*60)
+    else:
+        yield env.timeout(rest_of_day)
     reorder()
     temp_level = 0
     for k,v in ingredients_levels.items():
         temp_level = temp_level + ingredients_container[k].level
     ingredients_level_total["level"].append(temp_level)
     ingredients_level_total["time"].append(env.now)
-    yield env.timeout(20)
     print("day " + str(day) + " ended at:" + str(env.now))
     #reorder here
 
@@ -170,21 +176,22 @@ avg_demand_week0 = {'Chocolate A' : 15360, 'Chocolate B' : 15360,
           'Twisted Banana' : 12800, 'Vanilla Mango' : 12800}   
 
 #all ingredients are in g, except for 'Lakrids 1', which is one piece.
-BOM = {'Chocolate A' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Liquorice coating' : 0.02},
-       'Chocolate B' : {'Sugar' : 4, 'Liquorice' : 1, 'White Chocolate' : 4, 'Passionfruit coating' : 0.02}, 
-       'Chocolate C' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Coffee coating' : 0.02}, 
-       'Chocolate D' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Salt and caramel essence' : 0.04, 'liquorice coating' : 0.02}, 
-       'Chocolate E' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Salmiak coating' : 0.02},
-       'Crispy Caramel' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Crisp' : 0.04, 'liquorice coating' : 0.02}, 
-       'Blackberry & Dark' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Blackberry essence' : 0.02, 'liquorice coating' : 0.02},
-       'Twisted Banana' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Banana coating' : 0.02},
-       'Vanilla Mango' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Vanilla essence' : 0.02, 'Mango coating' : 0.02}}
+BOM = {'Chocolate A' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Liquorice coating' : 0.7},
+       'Chocolate B' : {'Sugar' : 4, 'Liquorice' : 1, 'White Chocolate' : 4, 'Passionfruit coating' : 0.7}, 
+       'Chocolate C' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Coffee coating' : 0.7}, 
+       'Chocolate D' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Salt and caramel essence' : 0.5, 'liquorice coating' : 0.7}, 
+       'Chocolate E' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Salmiak coating' : 0.7},
+       'Crispy Caramel' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Crisp' : 0.5, 'liquorice coating' : 0.7}, 
+       'Blackberry & Dark' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Blackberry essence' : 0.5, 'liquorice coating' : 0.7},
+       'Twisted Banana' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Banana coating' : 0.7},
+       'Vanilla Mango' : {'Sugar' : 4, 'Liquorice' : 1, 'Chocolate' : 4, 'Vanilla essence' : 0.5, 'Mango coating' : 0.7}}
 
 
 mean_demand_increase = 0.10
 demand_sd = 0.05
 batch_size = 1875
 batch_size_sd = batch_size*0.075
+holding_cost = 2.375
 #in minutes
 batch_time = 80
 batch_time_sd = 0.1*80
@@ -231,8 +238,40 @@ env.run()
 
 inventory_levels_dataframes = dict.copy(dict.fromkeys(ingredients_levels.keys() ))
 inventory_level_total_df = pd.DataFrame(ingredients_level_total, columns = dict.fromkeys(ingredients_level_total.keys() ))
+inventory_level_total_df["level"] = inventory_level_total_df["level"] / 1000
+inventory_level_total_df["time"] = inventory_level_total_df["time"] / 60
+
 for k,v in ingredients_levels.items():
     inventory_levels_dataframes[k] = pd.DataFrame(ingredients_levels[k], columns = dict.fromkeys(ingredients_levels[k].keys() ))
+    inventory_levels_dataframes[k]["level"] = inventory_levels_dataframes[k]["level"] / 1000
+    inventory_levels_dataframes[k]["time"] = inventory_levels_dataframes[k]["time"] / 60
 
-inventory_level_df_short = inventory_level_total_df[0:100]
-inventory_level_df_short.plot(kind = "line", x = "time", y = "level")
+inventory_level_total_df.plot(kind = "line", x = "time", y = "level",)
+mean = round(inventory_level_total_df["level"].mean(), 2)
+[ymin, ymax] = plt.gca().get_ylim()
+ax = plt.gca()
+ax.set_xlabel("time in hours")
+ax.set_ylabel("inventory levels in kg")
+area = auc(inventory_level_total_df["time"], inventory_level_total_df["level"])
+areas = dict.fromkeys(inventory_levels_dataframes.keys())
+
+for k,v in inventory_levels_dataframes.items():
+    inventory_levels_dataframes[k].plot(kind = "line", x= "time", y= "level", label = str(k)).set_ylim(ymin, ymax)
+    mean = round(inventory_levels_dataframes[k]["level"].mean(), 2)
+    area[k] = auc(inventory_levels_dataframes[k]["time"], inventory_levels_dataframes[k]["level"])
+    ax = plt.gca()
+    ax.text(0, ymax - ymax*0.1, 'mean levels = ' + str(mean) + " kg", style='italic',
+        bbox={'facecolor': 'red', 'alpha': 1, 'pad': 10},
+        verticalalignment='top', horizontalalignment='left',)
+    ax.set_xlabel("time in hours")
+    ax.set_ylabel("inventory levels in kg")
+
+inventory_level_total_first_weeks = inventory_level_total_df[0:(5*168)]
+inventory_level_total_first_weeks.plot(kind = "line", x = "time", y = "level", label = "week 1 to 5").set_ylim(ymin, ymax)
+plt.gca().set_xlabel("time in hours")
+plt.gca().set_ylabel("inventory levels in kg")
+
+inventory_level_total_last_weeks = inventory_level_total_df[-5:-1*168]
+inventory_level_total_last_weeks.plot(kind = "line", x = "time", y = "level", label = "week 48 to 53").set_ylim(ymin, ymax)
+plt.gca().set_xlabel("time in hours")
+plt.gca().set_ylabel("inventory levels in kg")
