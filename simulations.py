@@ -17,7 +17,7 @@ def unique_ingredients(BOM):
 def containers_full_levels(ingredients_container, BOM, forecast, percentage):
     for k,v in BOM.items():
         for t,c in BOM[k].items():
-            last_week_quantity = forecast.iloc[-1]
+            last_week_quantity = forecast.iloc[0]
             last_week_quantity = last_week_quantity.at[k]
             ingredients_container[t] = ingredients_container[t] + (c * last_week_quantity) * percentage
     return dict.copy(ingredients_container)

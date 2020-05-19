@@ -55,8 +55,7 @@ batch_time = 80
 batch_time_sd = 0.1*80
 number_of_machines = 8
 reorder_threshold = 0.4
-full_percentage = 2/5
-
+full_percentage = 1/5
 
 forecast2020 = create_forecast_year(2020, avg_demand_week0, mean_demand_increase, batch_size)
 
@@ -99,49 +98,51 @@ for k,v in ingredients_levels.items():
                
             
 #E-Kanban system code
-def kanban_cycle(orders_pr_week_full_int):
+def kanban_cycle(orders_pr_day_full_int):
     # To get the order_cycle we devide 5 (numbers of working days) with the EOQ (number of orders pr. week)
-    lead_time_in_hours = 12
-    lead_time_from_supplier = lead_time_in_hours/24
-    b = math.ceil(orders_pr_week_full_int / 5)
+    lead_time_in_minutes = 12*60
+    lead_time_from_supplier = lead_time_in_minutes/(24*60)
+    b = math.ceil(orders_pr_day_full_int / 5)
     a = 1
-    order_cycle = a / b
-    c = lead_time_from_supplier/order_cycle
+    if b != 0:
+        order_cycle = a / b
+        c = lead_time_from_supplier/order_cycle
+    else:
+        c = 0
     return {'a' : a, 'b' : b, 'c' : c}
 
 
    
  # This is the modified EOQ formula that determines how much of a product to buy for each order while considering 
  # variables like: holding costs, order cost and the yearly/weekly demand
-def EOQ(forecast, week, BOM, sales_price):  
+def EOQ(batches_to_produce, day, BOM, sales_price, shifts):  
     order_cost = 400
-    lead_time_in_hours = 12
-    service_level = 1.28
+    #service level is static at 28% of the forecasted demand
     order_amount = unique_ingredients(BOM)
-    EOQ_dict = order_amount.copy()
-    weekly_forecast = forecast.iloc[week]
+    EOQ_dict = dict.fromkeys(order_amount.keys(),0)
+    #print(batches_to_produce)
+    daily_forecast = dict.copy(batches_to_produce[int(day)])
+    for k,v in daily_forecast.items():
+        daily_forecast[k] = max(0,v * 1875)
+        #print(daily_forecast[k])
     for k,v in BOM.items():
         for t,c in BOM[k].items():
             # We divide the forecast with one thousand because that will give us the order in kg which is assumed
             # to be a standard ordering of products
             #adding safety stock to order amount
-            order_amount[t] = order_amount[t] + ((c * weekly_forecast.at[k]) /1000) + service_level * ((((c * weekly_forecast.at[k]) /1000) / 5) / 24 ) * lead_time_in_hours
-            EOQ_dict[t] = math.sqrt((2 * order_amount[t] * order_cost)/ (sales_price[t]*0.25) )
-    orders_pr_week_full_int = dict.fromkeys(EOQ_dict.keys())
+            order_amount[t] = order_amount[t] + (c * daily_forecast[k])
+            #print(str(k) + ", " + str(t) + ": " + str(order_amount[t]))
+            EOQ_dict[t] = math.sqrt((2 * order_amount[t] * order_cost) / ((sales_price[t]*0.25)/360 ))
+    #print(order_amount)
+    orders_pr_day_full_int = dict.fromkeys(EOQ_dict.keys())
     for k,v in EOQ_dict.items():
-        orders_pr_week_full_int[k] = math.ceil( order_amount[k] / EOQ_dict[k] )
-    return orders_pr_week_full_int
+        if EOQ_dict[k] != 0:
+            orders_pr_day_full_int[k] = math.ceil( order_amount[k] / EOQ_dict[k] )
+        else:
+            orders_pr_day_full_int[k] = 0
+    #print(orders_pr_day_full_int)
+    return orders_pr_day_full_int
 
-
-def kanban_number_func(orders_pr_week_full_int, demand_averages, safety_stock_levels, forecast, week):
-    bin_size = 5
-    a, b, c = kanban_cycle(orders_pr_week_full_int)
-    #weekly_forecast = forecast.iloc[week]
-    kanban_number = dict.copy(demand_averages)
-    for k,v in demand_averages.items():
-        kanban_number[k] = ((demand_averages[k] * a * (c + 1)/b + safety_stock_levels[k]) / bin_size)
-    print(kanban_number)
-    return kanban_number
 
 
 def iterate(env, iterations, ingredients_container_full):
@@ -168,7 +169,7 @@ def start_year(env, forecast, iteration):
         yield week
     areas = dict.fromkeys(ingredients_levels.keys())
     area = auc([x - iteration * 534240 for x in ingredients_level_total["time"]] , ingredients_level_total["level"])
-    print(area)
+    #print(area)
     for k,v in ingredients_levels.items():
         areas[k] = auc([x - iteration * 534240 for x in ingredients_levels[k]["time"]], ingredients_levels[k]["level"])
     with open("reportoutput.txt", "a+") as f:    
@@ -198,7 +199,7 @@ def start_week(env, week, forecast, ingredients_levels):
         shifts = 1
     else:
         shifts = 2
-    days = 5
+    days = int(5)
     day1_to_5_batches = [0] * days
     batches_temp = batches_to_produce.copy()
     batches_temp.values[:] = 0
@@ -224,18 +225,34 @@ def start_week(env, week, forecast, ingredients_levels):
             #print("excess batches in storage: " + str(excess_batches) + "of " + str(t))
             if k > 0:
                 if k != 4:       
-                    day1_to_5_batches[k+1][t] = day1_to_5_batches[k+1][t] - excess_batches
+                    day1_to_5_batches[k+1][t] = max(0,day1_to_5_batches[k+1][t] - excess_batches)
                 else:
                     weekly_rollover[t] = excess_batches
     #print("week ended at:" + str(env.now))
     
 
 def start_day(env, day, schedule, shifts):
-    #print("day " + str(day) + " started at:" + str(env.now))
+    print("day " + str(day) + " started at:" + str(env.now))
+    #print(schedule)
+    EOQ_dict = EOQ(schedule, day, BOM, sales_price_pr_product, shifts)
+    kanban_cycles = dict.fromkeys(EOQ_dict.keys())
+    number_of_deliveries = 0
+    for k,v in kanban_cycles.items():
+        kanban_cycles[k] = kanban_cycle(EOQ_dict[k])
+        number_of_deliveries = max(number_of_deliveries, kanban_cycles[k]['b'])
+    print("number of deliveries: " + str(number_of_deliveries))
+    for i in range(number_of_deliveries):
+        incoming_orders = [env.process(reorder(env, schedule[day], kanban_cycles, i, number_of_deliveries, shifts, BOM))]
+    if number_of_deliveries != 0:
+        yield incoming_orders[0]
     day_batches = []
-    for k,v in schedule[day].items():
-        for i in range(int(schedule[day][k])):
-            day_batches = [env.process(chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, k, BOM))]
+    comparison_schedule = dict.fromkeys(schedule[day].keys(),0)
+    while sum(schedule[day].values()) != sum(comparison_schedule.values()):
+        for k,v in schedule[day].items():
+            if comparison_schedule[k] != schedule[day][k]:
+                comparison_schedule[k] = comparison_schedule[k] + 1
+                #for i in range(int(schedule[day][k])):
+                day_batches = [env.process(chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd, k, BOM))]
     if len(day_batches) > 0:
         yield env.all_of(day_batches)
     temp_level = 0
@@ -251,7 +268,7 @@ def start_day(env, day, schedule, shifts):
         yield env.timeout(rest_of_day + 2*24*60)
     else:
         yield env.timeout(rest_of_day)
-    reorder()
+
     temp_level = 0
     for k,v in ingredients_levels.items():
         temp_level = temp_level + ingredients_container[k].level
@@ -259,7 +276,36 @@ def start_day(env, day, schedule, shifts):
     ingredients_level_total["time"].append(env.now)
     #print("day " + str(day) + " ended at:" + str(env.now))
     #reorder here
-
+    
+def reorder(env, schedule, kanban_cycles, delivery_number, number_of_deliveries, shifts, BOM):
+    global ingredients_levels
+    global deliveries
+    deliveries = deliveries + 1
+    time_between_deliveries = (shifts*8*60)/number_of_deliveries
+    #print("time until delivery:" + str(delivery_number*time_between_deliveries))
+    service_level = 0.10
+    yield env.timeout(delivery_number*time_between_deliveries)
+    print("delivery here at time: " + str(env.now))
+    current_levels = dict.fromkeys(ingredients_container.keys())
+    to_order = dict.fromkeys(ingredients_container.keys(), 0)
+    for k,v in current_levels.items():
+        current_levels[k] = ingredients_container[k].level
+    for k,v in BOM.items():
+        for t,c in BOM[k].items():
+            if kanban_cycles[t]['b'] != 0:
+                service_stock = schedule[k] * 1875 * BOM[k][t] * service_level
+                to_order[t] = to_order[t] + ((schedule[k] * 1875 * BOM[k][t] * kanban_cycles[t]["a"]*(kanban_cycles[t]['c']+1)/kanban_cycles[t]['b']) + service_stock)*1.10
+            else:
+                to_order[t] = 0
+    for k,v in to_order.items():
+        reorder_amount = max(0,to_order[k] - current_levels[k])
+        if reorder_amount > 0:
+            #print(str(reorder_amount) + "of" + str(k) + "delivered")
+            ingredients_container[k].put(reorder_amount)
+            ingredients_levels[k]["level"].append(ingredients_container[k].level)
+            ingredients_levels[k]["time"].append(env.now)
+                
+            
 
 def demand_day(env, week, batches):
     batches = batches * batch_size
@@ -302,8 +348,8 @@ def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd
                 temp_levels[k]["level"] = ingredients_container[k].level
                 temp_levels[k]["time"] = env.now
             else: 
-                #print("experienced stock-out at " + str(env.now) + "of product: " + str(k) )
-                #print("inventory is at: " + str(ingredients_container[k].level) )
+                print("experienced stock-out at " + str(env.now) + "of product: " + str(k) )
+                print("inventory is at: " + str(ingredients_container[k].level) + " of " + str(k) )
                 global stock_outs
                 stock_outs = stock_outs + 1
                 req_trig = False
@@ -315,28 +361,13 @@ def chocolate_batch_production(env, chocolate_machine, batch_time, batch_time_sd
                     ingredients_levels[k]["time"].append(temp_levels[k]["time"])
             batch_time = norm.rvs(loc = batch_time, scale = abs(batch_time_sd))
             yield env.timeout(batch_time)   
-            #print("batch of " + product_index + " finished at %d" % env.now )
+            print("batch of " + product_index + " finished at %d" % env.now )
             finished_product_container[product_index].put(round(norm.rvs(loc = batch_size, scale=abs(batch_size_sd))))
         else:
             #print("batch of " + str(product_index) + " failed")
             yield env.timeout(0)
 
-def reorder():
-    global ingredients_levels
-    for k,v in ingredients_container.items():
-        if ingredients_container[k].level < ingredients_container_full[k] * reorder_threshold:
-            global deliveries
-            deliveries = deliveries + 1
-            for k,v in ingredients_container.items():
-                #print("level of %s is:" %k + str(ingredients_container[k].level))
-                #print("reordered :" + str(ingredients_container_full[k] - ingredients_container[k].level))
-                reorder_amount = ingredients_container_full[k] - ingredients_container[k].level
-                if max(0,reorder_amount) != 0:
-                    ingredients_container[k].put(ingredients_container_full[k] - ingredients_container[k].level)
-                    ingredients_levels[k]["level"].append(ingredients_container[k].level)
-                    ingredients_levels[k]["time"].append(env.now)
-                
-            
+
     
 
 env.process(iterate(env, 100, ingredients_container_full))
