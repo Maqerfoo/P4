@@ -1,0 +1,270 @@
+
+#include <SPI.h>//include the SPI bus library
+#include <MFRC522.h>//include the RFID reader library
+#include "HX711.h" //include weight sensor signal amplifier library
+HX711 scale; // starts wegiht sensor 
+#define SS_PIN 10  //RFID Sensor slave select pin
+#define RST_PIN 9  //RFID Sensor reset pin
+MFRC522 mfrc522(SS_PIN, RST_PIN);        // instatiate a MFRC522 reader object.
+MFRC522::MIFARE_Key key;//create a MIFARE_Key struct named 'key', which will hold the card information
+//------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const int LOADCELL_DOUT_PIN = 3; // Weight sensor DT pin
+const int LOADCELL_SCK_PIN = 2; // Weight sensor SCK pin
+int calibration_factor = 371; // this calibration factor must be adjusted according to your load cell
+int weight; // creates a number that does not have a decimal point , Floating-point numbers can be as large as 3.4028235E+38 and as low as -3.4028235E+38. We use Int to avoid decimal point .
+int weight2;
+int threshold = 50; //threshold for signaling that we need to order again
+//------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+int block=2;//this is the block number we will write into and then read. Do not write into 'sector trailer' block, since this can make the block unusable.
+byte blockcontent[16] = {"5"};//an array with 16 bytes to be written into one of the 64 card blocks is defined!
+byte readbackblock[18];//This array is used for reading out a block. The MIFARE_Read method requires a buffer that is at least 18 bytes to hold the 16 bytes of a block.
+
+int block4=4; // this is second block in which we will store data, in this case, we will write part name                           
+byte blockcontent4[16] = {"Screw"};
+byte readbackblock4[18];
+
+int block5=5; //  in this block, we will write unit bin weight                           
+byte blockcontent5[16] = {"0"};
+byte readbackblock5[18];
+
+int block8=8; // in this block, we will write unit bin type                           
+byte blockcontent8[16] = {"BinTypeA"};
+byte readbackblock8[18];
+//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+void setup(){
+Serial.begin(9600);// we start serial monitor
+scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+//Serial.println("HX711 calibration sketch");
+scale.set_scale(calibration_factor); //Adjust to this calibration factor
+scale.tare(); //Reset the scale to 0
+long zero_factor = scale.read_average(); //Get a baseline reading
+
+ SPI.begin();               // Initialize SPI bus
+        mfrc522.PCD_Init();        // Init MFRC522 card (in case you wonder what PCD means: proximity coupling device)
+        Serial.println("Scan a MIFARE Classic card");
+         for (byte i = 0; i < 6; i++) {
+                key.keyByte[i] = 0xFF;//keyByte is defined in the "MIFARE_Key" 'struct' definition in the .h file of the library
+         }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+//Here is the stuff that is used to create int writeBlock and int readBlock
+// This part of the code below makes sure that we're not overwriting trailer blocks which can not be modified. 
+// This bit of code is here, in the beggining, because we need to "create" these functions before using them
+
+int writeBlock(int blockNumber, byte arrayAddress[]) 
+{
+  int largestModulo4Number = blockNumber/4*4;
+  int trailerBlock=largestModulo4Number+3;
+  if (blockNumber > 2 && (blockNumber+1)%4 == 0)
+  {
+    Serial.print(blockNumber);Serial.println(" is a trailer block:");return 2;
+  }
+  
+  //Serial.print(blockNumber);
+  //Serial.println(" is a data block:");
+  
+  
+  byte status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key, &(mfrc522.uid));
+  if (status != MFRC522::STATUS_OK) {
+         Serial.print("PCD_Authenticate() failed: ");
+         Serial.println(mfrc522.GetStatusCodeName(status));
+         return 3;//return "3" as error message
+  }        
+  status = mfrc522.MIFARE_Write(blockNumber, arrayAddress, 16);
+  if (status != MFRC522::STATUS_OK) {
+           Serial.print("MIFARE_Write() failed: ");
+           Serial.println(mfrc522.GetStatusCodeName(status));
+           return 4;//return "4" as error message
+  }
+
+}
+
+
+int readBlock(int blockNumber, byte arrayAddress[]) 
+{
+  int largestModulo4Number=blockNumber/4*4;
+  int trailerBlock=largestModulo4Number+3;//determine trailer block for the sector
+  byte status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, trailerBlock, &key, &(mfrc522.uid));
+  if (status != MFRC522::STATUS_OK) 
+  {
+         Serial.print("PCD_Authenticate() failed (read): ");
+         Serial.println(mfrc522.GetStatusCodeName(status));
+         return 3;//return "3" as error message
+  }
+
+
+
+        
+  byte buffersize = 18;//we need to define a variable with the read buffer size, since the MIFARE_Read method below needs a pointer to the variable that contains the size... 
+  status = mfrc522.MIFARE_Read(blockNumber, arrayAddress, &buffersize);//&buffersize is a pointer to the buffersize variable; MIFARE_Read requires a pointer instead of just a number
+  if (status != MFRC522::STATUS_OK) {
+          Serial.print("MIFARE_read() failed: ");
+          Serial.println(mfrc522.GetStatusCodeName(status));
+          return 4;//return "4" as error message
+  }
+
+
+}
+//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+void loop(){
+
+weight = scale.get_units(), 5; // this is the line of weight sensor code that measures weight and creates variable "weight"
+if (weight < 0)
+{
+weight = 0.00;
+}   // since weight sensor can deliver negative values, we use "if" logic and set weight to "0" if readings are negative
+Serial.print("Weight: ");
+Serial.print(weight);            //prints weight to serial monitor
+Serial.println(" grams   ");
+
+if ( ! mfrc522.PICC_IsNewCardPresent()) {//if PICC_IsNewCardPresent returns 1, a new card has been found and we continue
+    //if it did not find a new card is returns a '0' and we return to the start of the loop
+  }
+  if ( ! mfrc522.PICC_ReadCardSerial()) {
+    
+  }
+
+    // Serial.println("card selected");
+   writeBlock(block, blockcontent);   //the blockcontent array is written into the card block,  "block was written"
+    
+    writeBlock(block4, blockcontent4);
+
+    writeBlock(block5, blockcontent5);
+
+    writeBlock(block8, blockcontent8);
+
+    readBlock(block4, readbackblock4);
+
+         Serial.print("part name: ");
+         for (int j=0 ; j<16 ; j++)            //print the block contents
+         {
+          Serial.write (readbackblock4[j]);         //Serial.write() transmits the ASCII numbers as human readable characters to serial monitor
+         }// Screw
+
+ 
+
+           
+      readBlock(block, readbackblock);//read the block back, "block was read"
+      
+
+Serial.println();
+        readBlock(block5, readbackblock5); //Bin weight
+        
+        readBlock(block8, readbackblock8);
+        Serial.print("Bin Type: ");
+         for (int j=0 ; j<16 ; j++)//print the block contents
+         {
+          Serial.write (readbackblock8[j]);//Serial.write() transmits the ASCII numbers as human readable characters to serial monitor
+         }//BinTypeA
+         
+  char buffer[17]; // here we place each character from rfid tag to array in arduino,
+ buffer[0] = readbackblock[0];
+buffer[1] = readbackblock[1];
+buffer[2] = readbackblock[2];
+buffer[3] = readbackblock[3];
+buffer[4] = readbackblock[4];
+buffer[5] = readbackblock[5];
+buffer[6] = readbackblock[6];
+buffer[7] = readbackblock[7];
+buffer[8] = readbackblock[8];
+buffer[9] = readbackblock[9];
+buffer[10] = readbackblock[10];
+buffer[11] = readbackblock[11];
+buffer[12] = readbackblock[12];
+buffer[13] = readbackblock[13];
+buffer[14] = readbackblock[14];
+buffer[15] = readbackblock[15];
+buffer[16] = readbackblock[16];
+buffer[17] = '\0';
+float  part_weight;
+part_weight = atoi(buffer); // function atoi takes every character and puts them into one variable
+Serial.println(" ");
+     Serial.print( "part_weight:");
+Serial.println(part_weight);
+
+//---------------------------------------------------------------------------------------------------------//
+
+char buffer1[17];
+buffer1[0] = readbackblock5[0];
+buffer1[1] = readbackblock5[1];
+buffer1[2] = readbackblock5[2];
+buffer1[3] = readbackblock5[3];
+buffer1[4] = readbackblock5[4];
+buffer1[5] = readbackblock5[5];
+buffer1[6] = readbackblock5[6];
+buffer1[7] = readbackblock5[7];
+buffer1[8] = readbackblock5[8];
+buffer1[9] = readbackblock5[9];
+buffer1[10] = readbackblock5[10];
+buffer1[11] = readbackblock5[11];
+buffer1[12] = readbackblock5[12];
+buffer1[13] = readbackblock5[13];
+buffer1[14] = readbackblock5[14];
+buffer1[15] = readbackblock5[15];
+buffer1[16] = readbackblock5[16];
+buffer1[17] = '\0';
+
+
+char buffer2[5];
+buffer2[0] = readbackblock4[0];
+buffer2[1] = readbackblock4[1];
+buffer2[2] = readbackblock4[2];
+buffer2[3] = readbackblock4[3];
+buffer2[4] = readbackblock4[4];
+
+int Bin_weight;
+Bin_weight=atoi(buffer1);
+ Serial.print("Bin Weight : ");
+Serial.println(Bin_weight);
+//-------------------------------------------------------------------------------------;
+ float part_amount =  (weight- Bin_weight) / part_weight;
+
+Serial.print("Part amount: ");
+Serial.println(part_amount);
+
+//-----------------------------------------------------------------------;
+if (part_amount < threshold) {
+  Serial.println( "Order new parts");
+}// here we can create a variable which can be set to 1 when we have enough parts and to 0 when we need to order, then that variable can be printed in .txt file.
+//-----------------------------------------------------------------------;
+
+weight2 = scale.get_units(), 5; // we measure the weight again
+if (weight2 < 0)
+{
+weight2 = 0.00;
+}
+Serial.print("Weight: ");
+Serial.println(weight);
+Serial.print("Weight2: ");
+Serial.println(weight2);  
+if (weight == weight2 ) {
+  return;}                          // if there is no change in the weight, we dont want to record the data into .txt file, therefore we "jump" back to the beggining of the loop
+
+//-------------------------------------------------;
+
+delay(1000); // if there is a change, we wait 1 second while the operator is taking the part from the bin, and then we measure the weight
+weight2 = scale.get_units(), 5;
+if (weight2 < 0)
+{
+weight2 = 0.00;
+}
+float part_amount2 =  (weight2- Bin_weight) / part_weight;// we calculate the part amount with new readings
+int part_amount_r= round(part_amount2);
+Serial.print("#S|LOGTEST|["); // this is the command which starts up "gobetwino"
+Serial.print(" Part weight: ");
+Serial.print(part_weight);
+Serial.print(" Bin weight: ");
+Serial.print(itoa((Bin_weight), buffer, 10));
+Serial.print("Part amount: ");
+Serial.print(part_amount_r);
+Serial.print("Weight: ");
+Serial.print(weight2); 
+Serial.println("]#");
+
+
+Serial.println( "____________________________________________________________________________________________________");
+delay(1000); // 5 seconds delay
+}
